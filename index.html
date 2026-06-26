@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>⛽ Индекс дефицита топлива по регионам РФ</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#0b0e14;--card:#151b27;--card2:#1c2433;--line:#243047;--ink:#e9eef5;--mut:#8b98ad;--acc:#ff8c42;--red:#ff5d5d;--grn:#46d37b;--yel:#ffcf4d}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,Segoe UI,Roboto,Inter,sans-serif}
+.wrap{max-width:1180px;margin:0 auto;padding:22px 18px 70px}
+h1{font-size:25px;margin:0 0 3px;letter-spacing:-.4px}
+.sub{color:var(--mut);font-size:13.5px;margin:0 0 16px}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--grn);margin-right:6px;animation:p 1.6s infinite}@keyframes p{50%{opacity:.25}}
+.hyp{background:linear-gradient(135deg,#1d2535,#161d29);border:1px solid var(--line);border-left:3px solid var(--acc);border-radius:12px;padding:13px 16px;margin:0 0 20px;font-size:13.5px;color:#ccd6e2}
+.hyp b{color:var(--acc)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;margin-bottom:20px}
+.panel h2{margin:0 0 3px;font-size:17px}.panel .h2s{color:var(--mut);font-size:12.5px;margin:0 0 14px}
+.kpis{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:13px 16px;flex:1;min-width:150px}
+.kpi b{font-size:25px;display:block;letter-spacing:-.5px}.kpi span{color:var(--mut);font-size:12.5px}
+.tabs{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:12px}
+.tab{background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:18px;padding:5px 12px;font-size:12.5px;cursor:pointer}
+.tab.on{background:var(--acc);color:#241200;border-color:var(--acc);font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:right}
+th{color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;cursor:pointer}
+td:first-child,th:first-child{text-align:left}
+tr:hover td{background:var(--card2)}
+.badge{font-weight:700;border-radius:7px;padding:2px 8px;display:inline-block;min-width:54px;text-align:center}
+.up{background:#2a1717;color:var(--red)}.down{background:#15281c;color:var(--grn)}.flat{background:#202836;color:var(--mut)}
+.note{color:var(--mut);font-size:12px;margin-top:18px;border-top:1px solid var(--line);padding-top:14px}
+.note a{color:var(--acc)}
+canvas{max-height:330px}
+.sigbar{height:6px;border-radius:4px;background:#0d1219;overflow:hidden;margin-top:6px}.sigbar i{display:block;height:100%}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>⛽ Индекс дефицита топлива · регионы России</h1>
+  <p class="sub"><span class="live"></span>Главный сигнал — <b>динамика розничных цен</b> по неделям. Источник: Росстат · <span id="upd">загрузка…</span></p>
+
+  <div class="hyp">
+    <b>Что и зачем.</b> Цель — отслеживать <b>дефицит топлива по регионам</b>, а не просто пробки. Прямой маркер дефицита —
+    розничная цена и скорость её роста: где бензин дорожает быстрее и держится выше среднего по РФ, там рынок напряжённее
+    (независимые АЗС работают в убыток → перебои). Пробки — вторичный, поведенческий слой. Здесь — недельная динамика цен
+    из официального мониторинга Росстата.
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="panel">
+    <h2>Динамика цены АИ-92 по неделям</h2>
+    <p class="h2s">Линия региона vs средняя по РФ. Крутой подъём = ценовое давление (сигнал дефицита).</p>
+    <div class="tabs" id="tabs"></div>
+    <canvas id="line"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>Регионы по силе сигнала</h2>
+    <p class="h2s">Сортировка по росту АИ-92 за период наблюдения. Клик по строке — график региона.</p>
+    <div style="overflow-x:auto"><table id="tbl">
+      <thead><tr>
+        <th data-k="region">Регион</th><th data-k="ai92">АИ-92 ₽</th>
+        <th data-k="chg_pct">Δ за период</th><th data-k="vs_rf">к РФ</th>
+        <th data-k="dt">ДТ ₽</th><th>Сигнал</th>
+      </tr></thead><tbody></tbody>
+    </table></div>
+  </div>
+
+  <div class="note">
+    Данные: <a href="https://rosstat.gov.ru/statistics/price" target="_blank">Росстат — еженедельный мониторинг цен на нефтепродукты</a>.
+    Дефицит-сигнал = недельный рост цены АИ-92 + превышение над средней по РФ. Сбор автоматический. ·
+    <a href="https://github.com/logos-taranov/rf-fuel-deficit" target="_blank">исходники</a> · автономный агент Logos.
+    <br/>Дальше планируется: слой биржевого опта (СПбМТСБ) и поведенческий слой пробок (Яндекс) поверх ценового ядра.
+  </div>
+</div>
+
+<script>
+let DB=null,line=null,active=null,sortKey="chg_pct",sortDir=-1;
+const fmt=(v,d=2)=>v==null?"—":v.toFixed(d);
+function sig(p){if(p==null)return 0;return Math.max(0,Math.min(100,p*18));}
+function cls(p){if(p==null)return"flat";if(p>=1.5)return"up";if(p<=-0.3)return"down";return"flat";}
+
+async function load(){
+  DB=await (await fetch("data.json?_="+Date.now())).json();
+  document.getElementById("upd").textContent="обновлено "+DB.generated_msk+" · период "+DB.window.from+" → "+DB.window.to+" ("+DB.window.weeks+" нед.)";
+  if(!active) active=DB.regions[0]?.region;
+  render();
+}
+function render(){
+  const rf=DB.rf;
+  const worst=DB.regions[0];
+  const dear=[...DB.regions].sort((a,b)=>(b.ai92||0)-(a.ai92||0))[0];
+  document.getElementById("kpis").innerHTML=`
+    <div class="kpi"><b>${fmt(rf.ai92)} ₽</b><span>АИ-92 в среднем по РФ</span></div>
+    <div class="kpi"><b style="color:var(--red)">${worst.region}</b><span>макс. рост: +${fmt(worst.chg_pct)}% за период</span></div>
+    <div class="kpi"><b style="color:var(--yel)">${dear.region} · ${fmt(dear.ai92)}₽</b><span>самый дорогой АИ-92</span></div>
+    <div class="kpi"><b>${DB.regions.length}</b><span>регионов под наблюдением</span></div>`;
+  buildTabs(); drawLine(); drawTable();
+}
+function topRegions(n){return [...DB.regions].slice(0,n).map(r=>r.region);}
+function buildTabs(){
+  const t=document.getElementById("tabs");t.innerHTML="";
+  const list=[...new Set([active,...topRegions(7)])];
+  list.forEach(r=>{const b=document.createElement("div");b.className="tab"+(r===active?" on":"");b.textContent=r;b.onclick=()=>{active=r;render()};t.appendChild(b);});
+}
+function drawLine(){
+  const labels=DB.dates;
+  const reg=labels.map(d=>DB.series[d]?.[active]??null);
+  const rfKey=Object.keys(DB.series[labels[0]]).find(k=>k.startsWith("Российская Федерация"));
+  const rf=labels.map(d=>DB.series[d]?.[rfKey]??null);
+  if(line)line.destroy();
+  line=new Chart(document.getElementById("line"),{type:"line",data:{labels,datasets:[
+    {label:active,data:reg,borderColor:"#ff8c42",backgroundColor:"rgba(255,140,66,.12)",fill:true,tension:.3,borderWidth:2.5,pointRadius:4},
+    {label:"Средняя по РФ",data:rf,borderColor:"#8b98ad",borderDash:[6,4],fill:false,tension:.3,borderWidth:1.5,pointRadius:2}
+  ]},options:{responsive:true,interaction:{mode:"index",intersect:false},
+    scales:{y:{grid:{color:"#1d2535"},ticks:{color:"#8b98ad",callback:v=>v+"₽"}},x:{grid:{display:false},ticks:{color:"#8b98ad"}}},
+    plugins:{legend:{labels:{color:"#e9eef5"}}}}});
+}
+function drawTable(){
+  const tb=document.querySelector("#tbl tbody");
+  const rows=[...DB.regions].sort((a,b)=>{const x=a[sortKey],y=b[sortKey];
+    if(typeof x==="string")return sortDir*x.localeCompare(y);return sortDir*((y??-999)-(x??-999));});
+  tb.innerHTML=rows.map(r=>`<tr style="cursor:pointer" onclick="active=${JSON.stringify(r.region).replace(/"/g,'&quot;')};render()">
+    <td>${r.region}</td><td>${fmt(r.ai92)}</td>
+    <td><span class="badge ${cls(r.chg_pct)}">${r.chg_pct>0?"+":""}${fmt(r.chg_pct)}%</span></td>
+    <td style="color:${r.vs_rf>0?'#ff8c42':'#8b98ad'}">${r.vs_rf>0?"+":""}${fmt(r.vs_rf)}</td>
+    <td>${fmt(r.dt)}</td>
+    <td><div class="sigbar"><i style="width:${sig(r.chg_pct)}%;background:${r.chg_pct>=1.5?'#ff5d5d':r.chg_pct>=0.5?'#ffcf4d':'#46d37b'}"></i></div></td></tr>`).join("");
+}
+document.querySelectorAll("#tbl th[data-k]").forEach(th=>th.onclick=()=>{
+  const k=th.dataset.k; if(sortKey===k)sortDir*=-1;else{sortKey=k;sortDir=-1;} drawTable();});
+load();
+setInterval(load,10*60*1000);
+</script>
+</body>
+</html>
